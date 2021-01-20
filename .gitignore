@@ -2,6 +2,8 @@
 *.pyc
 *.pyo
 *.egg-info/
+*.pyd
+*.lib
 
 # Jupyter
 .ipynb_checkpoints
@@ -27,6 +29,12 @@ dist
 *.iobj
 *.ipdb
 *.pdb
+
+# Visual Studio settings
+PythonSettings.json
+*.pyproj*
+*.sln
+*.vcxproj
 
 # Documents
 _build
