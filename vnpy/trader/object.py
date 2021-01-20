@@ -5,7 +5,7 @@ Basic data structure used for general trading function in VN Trader.
 from dataclasses import dataclass
 from datetime import datetime
 from logging import INFO
-
+from threading import get_ident
 from .constant import Direction, Exchange, Interval, Offset, Status, Product, OptionType, OrderType
 
 ACTIVE_STATUSES = set([Status.SUBMITTING, Status.NOTTRADED, Status.PARTTRADED])
@@ -221,6 +221,7 @@ class LogData(BaseData):
     def __post_init__(self):
         """"""
         self.time = datetime.now()
+        self.thread_id = get_ident()
 
 
 @dataclass

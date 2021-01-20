@@ -3,6 +3,7 @@
 
 import pytz
 from datetime import datetime
+from typing import Type
 
 from .vnctpmd import MdApi
 from .vnctptd import TdApi
@@ -140,12 +141,12 @@ class CtptestGateway(BaseGateway):
 
     exchanges = list(EXCHANGE_CTP2VT.values())
 
-    def __init__(self, event_engine):
+    def __init__(self, event_engine, td_type: Type[TdApi] = CtpTdApi, md_type: Type[MdApi] = CtpMdApi):
         """Constructor"""
         super().__init__(event_engine, "CTPTEST")
 
-        self.td_api = CtpTdApi(self)
-        self.md_api = CtpMdApi(self)
+        self.td_api = td_type(self)
+        self.md_api = md_type(self)
 
     def connect(self, setting: dict):
         """"""
@@ -368,6 +369,83 @@ class CtpMdApi(MdApi):
         if self.connect_status:
             self.exit()
 
+class NullCtpMdApi(MdApi):
+    """"""
+
+    def __init__(self, gateway):
+        """Constructor"""
+        super(CtpMdApi, self).__init__()
+
+        self.gateway = gateway
+        self.gateway_name = gateway.gateway_name
+
+        self.reqid = 0
+
+        self.connect_status = False
+        self.login_status = False
+        self.subscribed = set()
+
+        self.userid = ""
+        self.password = ""
+        self.brokerid = ""
+
+    def onFrontConnected(self):
+        """
+        Callback when front server is connected.
+        """
+        pass
+
+    def onFrontDisconnected(self, reason: int):
+        """
+        Callback when front server is disconnected.
+        """
+        pass
+
+    def onRspUserLogin(self, data: dict, error: dict, reqid: int, last: bool):
+        """
+        Callback when user is logged in.
+        """
+        pass
+
+    def onRspError(self, error: dict, reqid: int, last: bool):
+        """
+        Callback when error occured.
+        """
+        pass
+
+    def onRspSubMarketData(self, data: dict, error: dict, reqid: int, last: bool):
+        """"""
+        pass
+
+    def onRtnDepthMarketData(self, data: dict):
+        """
+        Callback of tick data update.
+        """
+        pass
+
+    def connect(self, address: str, userid: str, password: str, brokerid: int):
+        """
+        Start connection to server.
+        """
+        pass
+
+    def login(self):
+        """
+        Login onto server.
+        """
+        pass
+
+    def subscribe(self, req: SubscribeRequest):
+        """
+        Subscribe to tick data update.
+        """
+        pass
+
+    def close(self):
+        """
+        Close the connection.
+        """
+        pass
 
 class CtpTdApi(TdApi):
     """"""

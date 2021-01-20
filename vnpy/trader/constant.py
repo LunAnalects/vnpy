@@ -157,3 +157,8 @@ class Interval(Enum):
     DAILY = "d"
     WEEKLY = "w"
     TICK = "tick"
+
+""" Logging constants
+"""
+kFormatterStr = "[%(threadName)s][%(asctime)s][%(levelname)s][%(funcName)s]: %(message)s"
+kRootLoggerName = "PLAN21"

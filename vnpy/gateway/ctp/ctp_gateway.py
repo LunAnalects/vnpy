@@ -5,6 +5,7 @@ import sys
 import pytz
 from datetime import datetime
 from time import sleep
+from typing import Type
 
 from vnpy.api.ctp import (
     MdApi,
@@ -127,113 +128,6 @@ symbol_name_map = {}
 symbol_size_map = {}
 
 
-class CtpGateway(BaseGateway):
-    """
-    VN Trader Gateway for CTP .
-    """
-
-    default_setting = {
-        "用户名": "",
-        "密码": "",
-        "经纪商代码": "",
-        "交易服务器": "",
-        "行情服务器": "",
-        "产品名称": "",
-        "授权编码": "",
-        "产品信息": ""
-    }
-
-    exchanges = list(EXCHANGE_CTP2VT.values())
-
-    def __init__(self, event_engine):
-        """Constructor"""
-        super().__init__(event_engine, "CTP")
-
-        self.td_api = CtpTdApi(self)
-        self.md_api = CtpMdApi(self)
-
-    def connect(self, setting: dict):
-        """"""
-        userid = setting["用户名"]
-        password = setting["密码"]
-        brokerid = setting["经纪商代码"]
-        td_address = setting["交易服务器"]
-        md_address = setting["行情服务器"]
-        appid = setting["产品名称"]
-        auth_code = setting["授权编码"]
-        product_info = setting["产品信息"]
-
-        if (
-            (not td_address.startswith("tcp://"))
-            and (not td_address.startswith("ssl://"))
-        ):
-            td_address = "tcp://" + td_address
-
-        if (
-            (not md_address.startswith("tcp://"))
-            and (not md_address.startswith("ssl://"))
-        ):
-            md_address = "tcp://" + md_address
-
-        self.td_api.connect(td_address, userid, password, brokerid, auth_code, appid, product_info)
-        self.md_api.connect(md_address, userid, password, brokerid)
-
-        self.init_query()
-
-    def subscribe(self, req: SubscribeRequest):
-        """"""
-        self.md_api.subscribe(req)
-
-    def send_order(self, req: OrderRequest):
-        """"""
-        if req.type == OrderType.RFQ:
-            vt_orderid = self.td_api.send_rfq(req)
-        else:
-            vt_orderid = self.td_api.send_order(req)
-        return vt_orderid
-
-    def cancel_order(self, req: CancelRequest):
-        """"""
-        self.td_api.cancel_order(req)
-
-    def query_account(self):
-        """"""
-        self.td_api.query_account()
-
-    def query_position(self):
-        """"""
-        self.td_api.query_position()
-
-    def close(self):
-        """"""
-        self.td_api.close()
-        self.md_api.close()
-
-    def write_error(self, msg: str, error: dict):
-        """"""
-        error_id = error["ErrorID"]
-        error_msg = error["ErrorMsg"]
-        msg = f"{msg}，代码：{error_id}，信息：{error_msg}"
-        self.write_log(msg)
-
-    def process_timer_event(self, event):
-        """"""
-        self.count += 1
-        if self.count < 2:
-            return
-        self.count = 0
-
-        func = self.query_functions.pop(0)
-        func()
-        self.query_functions.append(func)
-
-        self.md_api.update_date()
-
-    def init_query(self):
-        """"""
-        self.count = 0
-        self.query_functions = [self.query_account, self.query_position]
-        self.event_engine.register(EVENT_TIMER, self.process_timer_event)
 
 
 class CtpMdApi(MdApi):
@@ -411,6 +305,85 @@ class CtpMdApi(MdApi):
     def update_date(self):
         """"""
         self.current_date = datetime.now().strftime("%Y%m%d")
+
+
+class NullCtpMdApi(MdApi):
+    """"""
+
+    def __init__(self, gateway):
+        """Constructor"""
+        super(NullCtpMdApi, self).__init__()
+
+        self.gateway = gateway
+        self.gateway_name = gateway.gateway_name
+
+        self.reqid = 0
+
+        self.connect_status = False
+        self.login_status = False
+        self.subscribed = set()
+
+        self.userid = ""
+        self.password = ""
+        self.brokerid = ""
+
+    def onFrontConnected(self):
+        """
+        Callback when front server is connected.
+        """
+        pass
+
+    def onFrontDisconnected(self, reason: int):
+        """
+        Callback when front server is disconnected.
+        """
+        pass
+
+    def onRspUserLogin(self, data: dict, error: dict, reqid: int, last: bool):
+        """
+        Callback when user is logged in.
+        """
+        pass
+
+    def onRspError(self, error: dict, reqid: int, last: bool):
+        """
+        Callback when error occured.
+        """
+        pass
+
+    def onRspSubMarketData(self, data: dict, error: dict, reqid: int, last: bool):
+        """"""
+        pass
+
+    def onRtnDepthMarketData(self, data: dict):
+        """
+        Callback of tick data update.
+        """
+        pass
+
+    def connect(self, address: str, userid: str, password: str, brokerid: int):
+        """
+        Start connection to server.
+        """
+        pass
+
+    def login(self):
+        """
+        Login onto server.
+        """
+        pass
+
+    def subscribe(self, req: SubscribeRequest):
+        """
+        Subscribe to tick data update.
+        """
+        pass
+
+    def close(self):
+        """
+        Close the connection.
+        """
+        pass
 
 
 class CtpTdApi(TdApi):
@@ -923,8 +896,171 @@ class CtpTdApi(TdApi):
             self.exit()
 
 
+class NullCtpTdApi(TdApi):
+    """"""
+
+    def __init__(self, gateway):
+        """Constructor"""
+        super(NullCtpTdApi, self).__init__()
+
+        self.gateway = gateway
+        self.gateway_name = gateway.gateway_name
+
+        self.reqid = 0
+        self.order_ref = 0
+
+        self.connect_status = False
+        self.login_status = False
+        self.auth_status = False
+        self.login_failed = False
+        self.contract_inited = False
+
+        self.userid = ""
+        self.password = ""
+        self.brokerid = ""
+        self.auth_code = ""
+        self.appid = ""
+        self.product_info = ""
+
+        self.frontid = 0
+        self.sessionid = 0
+
+        self.order_data = []
+        self.trade_data = []
+        self.positions = {}
+        self.sysid_orderid_map = {}
+
+    def connect(
+        self,
+        address: str,
+        userid: str,
+        password: str,
+        brokerid: int,
+        auth_code: str,
+        appid: str,
+        product_info
+    ):
+        """
+        Start connection to server.
+        """
+        self.userid = userid
+        self.password = password
+        self.brokerid = brokerid
+        self.auth_code = auth_code
+        self.appid = appid
+        self.product_info = product_info
+
 def adjust_price(price: float) -> float:
     """"""
     if price == MAX_FLOAT:
         price = 0
     return price
+
+
+class CtpGateway(BaseGateway):
+    """
+    VN Trader Gateway for CTP .
+    """
+
+    default_setting = {
+        "用户名": "",
+        "密码": "",
+        "经纪商代码": "",
+        "交易服务器": "",
+        "行情服务器": "",
+        "产品名称": "",
+        "授权编码": "",
+        "产品信息": ""
+    }
+
+    exchanges = list(EXCHANGE_CTP2VT.values())
+
+    def __init__(self, event_engine, td_type: Type[TdApi] = CtpTdApi, md_type: Type[MdApi] = CtpMdApi):
+        """Constructor"""
+        super().__init__(event_engine, "CTP")
+
+        self.td_api = td_type(self)
+        self.md_api = md_type(self)
+
+    def connect(self, setting: dict):
+        """"""
+        userid = setting["用户名"]
+        password = setting["密码"]
+        brokerid = setting["经纪商代码"]
+        td_address = setting["交易服务器"]
+        md_address = setting["行情服务器"]
+        appid = setting["产品名称"]
+        auth_code = setting["授权编码"]
+        product_info = setting["产品信息"]
+
+        if (
+            (not td_address.startswith("tcp://"))
+            and (not td_address.startswith("ssl://"))
+        ):
+            td_address = "tcp://" + td_address
+
+        if (
+            (not md_address.startswith("tcp://"))
+            and (not md_address.startswith("ssl://"))
+        ):
+            md_address = "tcp://" + md_address
+
+        self.td_api.connect(td_address, userid, password, brokerid, auth_code, appid, product_info)
+        self.md_api.connect(md_address, userid, password, brokerid)
+
+        self.init_query()
+
+    def subscribe(self, req: SubscribeRequest):
+        """"""
+        self.md_api.subscribe(req)
+
+    def send_order(self, req: OrderRequest):
+        """"""
+        if req.type == OrderType.RFQ:
+            vt_orderid = self.td_api.send_rfq(req)
+        else:
+            vt_orderid = self.td_api.send_order(req)
+        return vt_orderid
+
+    def cancel_order(self, req: CancelRequest):
+        """"""
+        self.td_api.cancel_order(req)
+
+    def query_account(self):
+        """"""
+        self.td_api.query_account()
+
+    def query_position(self):
+        """"""
+        self.td_api.query_position()
+
+    def close(self):
+        """"""
+        self.td_api.close()
+        self.md_api.close()
+
+    def write_error(self, msg: str, error: dict):
+        """"""
+        error_id = error["ErrorID"]
+        error_msg = error["ErrorMsg"]
+        msg = f"{msg}，代码：{error_id}，信息：{error_msg}"
+        self.write_log(msg)
+
+    def process_timer_event(self, event):
+        """"""
+        self.count += 1
+        if self.count < 2:
+            return
+        self.count = 0
+
+        func = self.query_functions.pop(0)
+        func()
+        self.query_functions.append(func)
+
+        self.md_api.update_date()
+
+    def init_query(self):
+        """"""
+        self.count = 0
+        self.query_functions = [self.query_account, self.query_position]
+        self.event_engine.register(EVENT_TIMER, self.process_timer_event)

@@ -1,8 +1,14 @@
+
 """
 """
 
 import logging
 from logging import Logger
+from logging import FileHandler
+from logging import CRITICAL
+# critical trade logging
+TRADING = CRITICAL + 1
+from logging.handlers import QueueHandler, QueueListener
 import smtplib
 import os
 from abc import ABC
@@ -41,7 +47,7 @@ from .object import (
 )
 from .setting import SETTINGS
 from .utility import get_folder_path, TRADER_DIR
-
+from .constant import kFormatterStr, kRootLoggerName
 
 class MainEngine:
     """
@@ -55,7 +61,6 @@ class MainEngine:
         else:
             self.event_engine = EventEngine()
         self.event_engine.start()
-
         self.gateways: Dict[str, BaseGateway] = {}
         self.engines: Dict[str, BaseEngine] = {}
         self.apps: Dict[str, BaseApp] = {}
@@ -224,7 +229,6 @@ class MainEngine:
         """
         # Stop event engine first to prevent new timer event.
         self.event_engine.stop()
-
         for engine in self.engines.values():
             engine.close()
 
@@ -264,25 +268,34 @@ class LogEngine(BaseEngine):
 
         if not SETTINGS["log.active"]:
             return
-
+        
         self.level: int = SETTINGS["log.level"]
 
-        self.logger: Logger = logging.getLogger("VN Trader")
+        self.logger: Logger = logging.getLogger(kRootLoggerName)
         self.logger.setLevel(self.level)
 
-        self.formatter = logging.Formatter(
-            "%(asctime)s  %(levelname)s: %(message)s"
-        )
+        self.formatter = logging.Formatter(kFormatterStr)
 
         self.add_null_handler()
 
         if SETTINGS["log.console"]:
             self.add_console_handler()
 
+        self.logging_ql = None
         if SETTINGS["log.file"]:
-            self.add_file_handler()
+            if SETTINGS["log.file.nonblocking"] is True:
+                self.logging_q = Queue(-1)
+                self.logging_q_fh = self.create_file_handler("log_main_{}.txt")
+                self.logging_ql = QueueListener(self.logging_q, self.logging_q_fh)
+                self.logging_qh = QueueHandler(self.logging_q)
+                self.logger.addHandler(self.logging_qh)
+                self.logging_ql.start()
+            else:
+                self.add_file_handler("log_{}.txt")
+
 
         self.register_event()
+        self.print_banner()
 
     def add_null_handler(self) -> None:
         """
@@ -300,12 +313,12 @@ class LogEngine(BaseEngine):
         console_handler.setFormatter(self.formatter)
         self.logger.addHandler(console_handler)
 
-    def add_file_handler(self) -> None:
+    def create_file_handler(self, filename_pattern : str = None) -> FileHandler:
         """
         Add file output of log.
         """
         today_date = datetime.now().strftime("%Y%m%d")
-        filename = f"vt_{today_date}.log"
+        filename = f"vt_{today_date}.log" if filename_pattern is None else filename_pattern.format(today_date)
         log_path = get_folder_path("log")
         file_path = log_path.joinpath(filename)
 
@@ -314,7 +327,13 @@ class LogEngine(BaseEngine):
         )
         file_handler.setLevel(self.level)
         file_handler.setFormatter(self.formatter)
-        self.logger.addHandler(file_handler)
+        return file_handler
+
+    def add_file_handler(self, filename_pattern : str = None) -> None:
+        """
+        Add file output of log.
+        """
+        self.logger.addHandler(self.create_file_handler(filename_pattern))
 
     def register_event(self) -> None:
         """"""
@@ -325,8 +344,22 @@ class LogEngine(BaseEngine):
         Process log event.
         """
         log = event.data
-        self.logger.log(log.level, log.msg)
+        if self.logger.isEnabledFor(log.level):
+            self.logger.log(log.level, f'[{log.thread_id}][{log.time}]' + log.msg)
 
+    def print_banner(self) -> None:
+        self.logger.critical(">>PLAN21<<")
+
+    def stop_logging_queue_listener(self) -> None:
+        self.logger.critical("stop_logging_queue_listener")
+        self.logging_ql.enqueue_sentinel()
+        self.logging_ql.stop()
+
+    def close(self) -> None:
+        self.logger.critical(">>BYE<<")
+        if self.logging_ql is not None:
+            self.stop_logging_queue_listener()
+        
 
 class OmsEngine(BaseEngine):
     """
